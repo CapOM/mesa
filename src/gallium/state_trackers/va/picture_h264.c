@@ -32,6 +32,7 @@ void vlVaHandlePictureParameterBufferH264(vlVaDriver *drv, vlVaContext *context,
 {
    VAPictureParameterBufferH264 *h264 = buf->data;
    /* Solution 1 */
+   unsigned int i;
    unsigned int top_or_bottom_field;
 
    assert(buf->size >= sizeof(VAPictureParameterBufferH264) && buf->num_elements == 1);
@@ -118,7 +119,8 @@ void vlVaHandlePictureParameterBufferH264(vlVaDriver *drv, vlVaContext *context,
          context->desc.h264.field_order_cnt_list[i][1] = 0;
          break;
       }
-      getReferenceFrame(drv, h264->ReferenceFrames[i].picture_id, &context->desc.h264.ref[i]);
+
+      vlVaGetReferenceFrame(drv, h264->ReferenceFrames[i].picture_id, &context->desc.h264.ref[i]);
       context->desc.h264.frame_num_list[i] = h264->ReferenceFrames[i].frame_idx;
 
       /* Solution 1 */
