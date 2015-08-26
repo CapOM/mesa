@@ -238,6 +238,7 @@ nouveau_vp3_bsp_begin(struct nouveau_vp3_decoder *dec)
    struct strparm_bsp *str_bsp = NULL;
 
    dec->bsp_ptr = bsp_bo->map;
+   dec->bsp_size = NOUVEAU_VP3_BSP_RESERVED_SIZE;
 
    dec->bsp_ptr += 0x100;
 
@@ -329,6 +330,7 @@ nouveau_vp3_bsp_end(struct nouveau_vp3_decoder *dec, union pipe_desc desc)
    *(uint32_t *)dec->bsp_ptr = 0x00000000;
 
    dec->bsp_ptr = NULL;
+   dec->bsp_size = 0;
 
    return caps;
 }
