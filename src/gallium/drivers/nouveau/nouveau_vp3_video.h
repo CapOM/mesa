@@ -121,6 +121,9 @@ struct nouveau_vp3_decoder {
 
    /* Total data appended so far after last begin frame. */
    unsigned bsp_size;
+
+   /* Number of slices so far since last begin frame */
+   unsigned int nb_slices;
 };
 
 struct comm {
