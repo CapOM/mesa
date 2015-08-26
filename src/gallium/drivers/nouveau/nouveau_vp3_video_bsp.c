@@ -128,6 +128,8 @@ nouveau_vp3_fill_picparm_mpeg12_bsp(struct nouveau_vp3_decoder *dec,
    for (i = 0; i < 4; ++i)
       pic_bsp->f_code[i/2][i%2] = desc->f_code[i/2][i%2] + 1; // FU
 
+   desc->num_slices = dec->nb_slices;
+
    return (desc->num_slices << 4) | (dec->base.profile != PIPE_VIDEO_PROFILE_MPEG1);
 }
 
@@ -162,7 +164,11 @@ nouveau_vp3_fill_picparm_vc1_bsp(struct nouveau_vp3_decoder *dec,
                                  char *map)
 {
    struct vc1_picparm_bsp *vc = (struct vc1_picparm_bsp *)map;
-   uint32_t caps = (d->slice_count << 4)&0xfff0;
+   uint32_t caps = 0;
+
+   d->slice_count = dec->nb_slices;
+   caps = (d->slice_count << 4)&0xfff0;
+
    vc->width = dec->base.width;
    vc->height = dec->base.height;
    vc->profile = dec->base.profile - PIPE_VIDEO_PROFILE_VC1_SIMPLE; // 04
@@ -194,9 +200,12 @@ nouveau_vp3_fill_picparm_h264_bsp(struct nouveau_vp3_decoder *dec,
                                   char *map)
 {
    struct h264_picparm_bsp stub_h = {}, *h = &stub_h;
-   uint32_t caps = (d->slice_count << 4)&0xfff0;
+   uint32_t caps = 0;
+
+   d->slice_count = dec->nb_slices;
 
    assert(!(d->slice_count & ~0xfff));
+   caps = (d->slice_count << 4)&0xfff0;
    if (d->slice_count & 0x1000)
       caps |= 1 << 20;
 
@@ -239,6 +248,7 @@ nouveau_vp3_bsp_begin(struct nouveau_vp3_decoder *dec)
 
    dec->bsp_ptr = bsp_bo->map;
    dec->bsp_size = NOUVEAU_VP3_BSP_RESERVED_SIZE;
+   dec->nb_slices = 0;
 
    dec->bsp_ptr += 0x100;
 
@@ -265,6 +275,8 @@ nouveau_vp3_bsp_next(struct nouveau_vp3_decoder *dec, unsigned num_buffers,
    char *bsp_origin = bsp_bo->map;
    struct strparm_bsp *str_bsp = NULL;
    int i = 0;
+
+   ++dec->nb_slices;
 
    bsp_origin += 0x100;
    str_bsp = (struct strparm_bsp *)bsp_origin;
@@ -331,6 +343,7 @@ nouveau_vp3_bsp_end(struct nouveau_vp3_decoder *dec, union pipe_desc desc)
 
    dec->bsp_ptr = NULL;
    dec->bsp_size = 0;
+   dec->nb_slices = 0;
 
    return caps;
 }
