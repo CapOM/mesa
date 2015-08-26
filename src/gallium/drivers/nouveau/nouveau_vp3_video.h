@@ -118,6 +118,9 @@ struct nouveau_vp3_decoder {
    /* End of the bsp bo where new data should be appended between one begin/end
     * frame. */
    char *bsp_ptr;
+
+   /* Total data appended so far after last begin frame. */
+   unsigned bsp_size;
 };
 
 struct comm {
