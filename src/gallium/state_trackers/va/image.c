@@ -184,10 +184,119 @@ vlVaCreateImage(VADriverContextP ctx, VAImageFormat *format, int width, int heig
 VAStatus
 vlVaDeriveImage(VADriverContextP ctx, VASurfaceID surface, VAImage *image)
 {
+   vlVaDriver *drv = NULL;
+   vlVaSurface *surf = NULL;
+   vlVaBuffer *img_buf = NULL;
+   VAImage *img = NULL;
+   struct pipe_surface **surfaces = NULL;
+   int w = 0;
+   int h = 0;
+   int i = 0;
+
    if (!ctx)
       return VA_STATUS_ERROR_INVALID_CONTEXT;
 
-   return VA_STATUS_ERROR_UNIMPLEMENTED;
+   drv = VL_VA_DRIVER(ctx);
+
+   surf = handle_table_get(drv->htab, surface);
+
+   if (!surf || !surf->buffer)
+      return VA_STATUS_ERROR_INVALID_SURFACE;
+
+   img = CALLOC(1, sizeof(VAImage));
+   if (!img)
+      return VA_STATUS_ERROR_ALLOCATION_FAILED;
+
+   img->format.fourcc = PipeToYCbCr(surf->buffer->buffer_format);
+   img->buf = VA_INVALID_ID;
+   img->width = surf->buffer->width;
+   img->height = surf->buffer->height;
+   img->num_palette_entries = 0;
+   img->entry_bytes = 0;
+   w = align(surf->buffer->width, 2);
+   h = align(surf->buffer->height, 2);
+
+   switch (img->format.fourcc) {
+   case VA_FOURCC('N','V','1','2'):
+      img->num_planes = 2;
+      img->pitches[0] = w;
+      img->offsets[0] = 0;
+      img->pitches[1] = w;
+      img->offsets[1] = w * h;
+      img->data_size  = w * h * 3 / 2;
+      break;
+
+   case VA_FOURCC('I','4','2','0'):
+   case VA_FOURCC('Y','V','1','2'):
+      img->num_planes = 3;
+      img->pitches[0] = w;
+      img->offsets[0] = 0;
+      img->pitches[1] = w / 2;
+      img->offsets[1] = w * h;
+      img->pitches[2] = w / 2;
+      img->offsets[2] = w * h * 5 / 4;
+      img->data_size  = w * h * 3 / 2;
+      break;
+
+   case VA_FOURCC('U','Y','V','Y'):
+   case VA_FOURCC('Y','U','Y','V'):
+      img->num_planes = 1;
+      img->pitches[0] = w * 2;
+      img->offsets[0] = 0;
+      img->data_size  = w * h * 2;
+      break;
+
+   case VA_FOURCC('B','G','R','A'):
+   case VA_FOURCC('R','G','B','A'):
+   case VA_FOURCC('B','G','R','X'):
+   case VA_FOURCC('R','G','B','X'):
+      img->num_planes = 1;
+      img->pitches[0] = w * 4;
+      img->offsets[0] = 0;
+      img->data_size  = w * h * 4;
+      for (i = 0; i < VL_VA_MAX_IMAGE_FORMATS; ++i) {
+         if (img->format.fourcc == formats[i].fourcc)
+           img->format = formats[i];
+      }
+      break;
+
+   default:
+      return VA_STATUS_ERROR_INVALID_IMAGE_FORMAT;
+   }
+
+   /* Only support 1 plane for now. */
+   if (img->num_planes > 1)
+      return VA_STATUS_ERROR_UNIMPLEMENTED;
+
+   img_buf = CALLOC(1, sizeof(vlVaBuffer));
+   if (!img_buf) {
+      FREE(img);
+      return VA_STATUS_ERROR_ALLOCATION_FAILED;
+   }
+
+   img->image_id = handle_table_add(drv->htab, img);
+
+   img_buf->type = VAImageBufferType;
+   img_buf->size = image->data_size;
+   img_buf->num_elements = 1;
+   img_buf->data = NULL;
+   img_buf->fence = surf->fence;
+
+   surfaces = surf->buffer->get_surfaces(surf->buffer);
+
+   if (!surfaces || !surfaces[0]->texture) {
+       FREE(img);
+       FREE(img_buf);
+       return VA_STATUS_ERROR_ALLOCATION_FAILED;
+   }
+
+   pipe_resource_reference(&img_buf->resource, surfaces[0]->texture);
+
+   img->buf = handle_table_add(VL_VA_DRIVER(ctx)->htab, img_buf);
+
+   *image = *img;
+
+   return VA_STATUS_SUCCESS;
 }
 
 VAStatus
@@ -341,6 +450,11 @@ vlVaPutImage(VADriverContextP ctx, VASurfaceID surface, VAImageID image,
    img_buf = handle_table_get(drv->htab, vaimage->buf);
    if (!img_buf)
       return VA_STATUS_ERROR_INVALID_BUFFER;
+
+   if (img_buf->resource) {
+      /* Attempting to transfer derived image to surface */
+      return VA_STATUS_ERROR_UNIMPLEMENTED;
+   }
 
    format = YCbCrToPipe(vaimage->format.fourcc);
    if (format == PIPE_FORMAT_NONE)
