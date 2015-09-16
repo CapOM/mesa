@@ -33,6 +33,7 @@
 
 #include <va/va.h>
 #include <va/va_backend.h>
+#include <va/va_backend_vpp.h>
 
 #include "pipe/p_video_enums.h"
 #include "pipe/p_video_codec.h"
@@ -147,7 +148,8 @@ PipeToProfile(enum pipe_video_profile profile)
    case PIPE_VIDEO_PROFILE_MPEG4_AVC_HIGH:
       return VAProfileH264High;
    case PIPE_VIDEO_PROFILE_MPEG4_AVC_EXTENDED:
-       return VAProfileNone;
+   case PIPE_VIDEO_PROFILE_UNKNOWN:
+      return VAProfileNone;
    default:
       assert(0);
       return -1;
@@ -178,6 +180,8 @@ ProfileToPipe(VAProfile profile)
       return PIPE_VIDEO_PROFILE_MPEG4_AVC_MAIN;
    case VAProfileH264High:
       return PIPE_VIDEO_PROFILE_MPEG4_AVC_HIGH;
+   case VAProfileNone:
+       return PIPE_VIDEO_PROFILE_UNKNOWN;
    default:
       return PIPE_VIDEO_PROFILE_UNKNOWN;
    }
@@ -319,4 +323,11 @@ VAStatus vlVaCreateSurfaces2(VADriverContextP ctx, unsigned int format, unsigned
                              unsigned int num_attribs);
 VAStatus vlVaQuerySurfaceAttributes(VADriverContextP ctx, VAConfigID config, VASurfaceAttrib *attrib_list,
                                     unsigned int *num_attribs);
+
+VAStatus vlVaQueryVideoProcFilters(VADriverContextP ctx, VAContextID context, VAProcFilterType *filters,
+                                   unsigned int *num_filters);
+VAStatus vlVaQueryVideoProcFilterCaps(VADriverContextP ctx, VAContextID context, VAProcFilterType type,
+                                      void *filter_caps, unsigned int *num_filter_caps);
+VAStatus vlVaQueryVideoProcPipelineCaps(VADriverContextP ctx, VAContextID context, VABufferID *filters,
+                                        unsigned int num_filters, VAProcPipelineCaps *pipeline_cap);
 #endif //VA_PRIVATE_H
