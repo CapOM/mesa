@@ -243,13 +243,15 @@ vlVaCreateContext(VADriverContextP ctx, VAConfigID config_id, int picture_width,
       templat.chroma_format = PIPE_VIDEO_CHROMA_FORMAT_420;
       templat.width = picture_width;
       templat.height = picture_height;
-      templat.max_references = num_render_targets;
+      templat.max_references = 2;
       templat.expect_chunked_decode = true;
 
       if (u_reduce_video_profile(templat.profile) ==
-        PIPE_VIDEO_FORMAT_MPEG4_AVC)
-        templat.level = u_get_h264_level(templat.width, templat.height,
-                             &templat.max_references);
+          PIPE_VIDEO_FORMAT_MPEG4_AVC) {
+         templat.max_references = 16;
+         templat.level = u_get_h264_level(templat.width, templat.height,
+                               &templat.max_references);
+      }
 
       context->decoder = drv->pipe->create_video_codec(drv->pipe, &templat);
       if (!context->decoder) {
