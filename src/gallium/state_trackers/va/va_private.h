@@ -312,4 +312,11 @@ VAStatus vlVaLockSurface(VADriverContextP ctx, VASurfaceID surface, unsigned int
                          unsigned int *buffer_name, void **buffer);
 VAStatus vlVaUnlockSurface(VADriverContextP ctx, VASurfaceID surface);
 
+VAStatus vlVaGetSurfaceAttributes(VADriverContextP ctx, VAConfigID config, VASurfaceAttrib *attrib_list,
+                                  unsigned int num_attribs); /* DEPRECATED */
+VAStatus vlVaCreateSurfaces2(VADriverContextP ctx, unsigned int format, unsigned int width, unsigned int height,
+                             VASurfaceID *surfaces, unsigned int num_surfaces, VASurfaceAttrib *attrib_list,
+                             unsigned int num_attribs);
+VAStatus vlVaQuerySurfaceAttributes(VADriverContextP ctx, VAConfigID config, VASurfaceAttrib *attrib_list,
+                                    unsigned int *num_attribs);
 #endif //VA_PRIVATE_H
