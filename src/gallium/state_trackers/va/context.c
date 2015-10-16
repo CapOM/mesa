@@ -28,7 +28,8 @@
 
 #include "pipe/p_screen.h"
 #include "pipe/p_video_codec.h"
-
+#include "pipe-loader/pipe_loader.h"
+#include "state_tracker/drm_driver.h"
 #include "util/u_memory.h"
 #include "util/u_handle_table.h"
 #include "util/u_video.h"
@@ -100,7 +101,7 @@ static struct VADriverVTableVPP vtable_vpp =
 PUBLIC VAStatus
 VA_DRIVER_INIT_FUNC(VADriverContextP ctx)
 {
-   vlVaDriver *drv;
+   vlVaDriver *drv = NULL;
 
    if (!ctx)
       return VA_STATUS_ERROR_INVALID_CONTEXT;
@@ -109,8 +110,40 @@ VA_DRIVER_INIT_FUNC(VADriverContextP ctx)
    if (!drv)
       return VA_STATUS_ERROR_ALLOCATION_FAILED;
 
-   drv->vscreen = vl_screen_create(ctx->native_dpy, ctx->x11_screen);
-   if (!drv->vscreen)
+   drv->vscreen = NULL;
+
+   switch (ctx->display_type) {
+   case VA_DISPLAY_X11:
+      drv->vscreen = vl_screen_create(ctx->native_dpy, ctx->x11_screen);
+      if (!drv->vscreen)
+         goto error_screen;
+      break;
+
+   case VA_DISPLAY_DRM:
+   case VA_DISPLAY_DRM_RENDERNODES: {
+      struct drm_state *drm_info = (struct drm_state *) ctx->drm_state;
+      if (!drm_info)
+         goto error_screen;
+
+      drv->vscreen = CALLOC_STRUCT(vl_screen);
+
+#if GALLIUM_STATIC_TARGETS
+      drv->vscreen->pscreen = dd_create_screen(drm_info->fd);
+#else
+      int loader_fd = dup(drm_info->fd);
+      if (loader_fd == -1)
+         goto error_screen;
+
+      if (pipe_loader_drm_probe_fd(&drv->dev, loader_fd))
+         drv->vscreen->pscreen = pipe_loader_create_screen(drv->dev, PIPE_SEARCH_DIR);
+#endif
+      }
+      break;
+   default:
+      goto error_screen;
+   }
+
+   if (!drv->vscreen->pscreen)
       goto error_screen;
 
    drv->pipe = drv->vscreen->pscreen->context_create(drv->vscreen->pscreen,
@@ -148,8 +181,11 @@ error_htab:
 
 error_pipe:
    vl_screen_destroy(drv->vscreen);
+   drv->vscreen = NULL;
 
 error_screen:
+   if (drv->vscreen)
+      FREE(drv->vscreen);
    FREE(drv);
    return VA_STATUS_ERROR_ALLOCATION_FAILED;
 }
@@ -268,7 +304,10 @@ vlVaTerminate(VADriverContextP ctx)
    vl_compositor_cleanup_state(&drv->cstate);
    vl_compositor_cleanup(&drv->compositor);
    drv->pipe->destroy(drv->pipe);
-   vl_screen_destroy(drv->vscreen);
+   if (ctx->display_type == VA_DISPLAY_X11)
+      vl_screen_destroy(drv->vscreen);
+   else
+       FREE(drv->vscreen);
    handle_table_destroy(drv->htab);
    FREE(drv);
 
