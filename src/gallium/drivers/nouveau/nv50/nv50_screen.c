@@ -905,6 +905,7 @@ nv50_screen_create(struct nouveau_device *dev)
    return pscreen;
 
 fail:
+   screen->base.device = 0;
    nv50_screen_destroy(pscreen);
    return NULL;
 }

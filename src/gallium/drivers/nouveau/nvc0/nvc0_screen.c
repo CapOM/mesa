@@ -609,6 +609,7 @@ nvc0_screen_resize_tls_area(struct nvc0_screen *screen,
 #define FAIL_SCREEN_INIT(str, err)                    \
    do {                                               \
       NOUVEAU_ERR(str, err);                          \
+      screen->base.device = 0;                        \
       nvc0_screen_destroy(pscreen);                   \
       return NULL;                                    \
    } while(0)

@@ -177,13 +177,17 @@ nouveau_screen_init(struct nouveau_screen *screen, struct nouveau_device *dev)
 	screen->device = dev;
 
 	ret = nouveau_client_new(screen->device, &screen->client);
-	if (ret)
+	if (ret) {
+		screen->device = 0;
 		return ret;
+	}
 	ret = nouveau_pushbuf_new(screen->client, screen->channel,
 				  4, 512 * 1024, 1,
 				  &screen->pushbuf);
-	if (ret)
+	if (ret) {
+		screen->device = 0;
 		return ret;
+	}
 
         /* getting CPU time first appears to be more accurate */
         screen->cpu_gpu_time_delta = os_time_get();
