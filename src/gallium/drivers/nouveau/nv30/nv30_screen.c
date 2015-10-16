@@ -412,6 +412,7 @@ nv30_screen_destroy(struct pipe_screen *pscreen)
 #define FAIL_SCREEN_INIT(str, err)                    \
    do {                                               \
       NOUVEAU_ERR(str, err);                          \
+      screen->base.device = 0;                        \
       nv30_screen_destroy(pscreen);                   \
       return NULL;                                    \
    } while(0)
