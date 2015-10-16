@@ -420,8 +420,10 @@ nv30_screen_create(struct nouveau_device *dev)
    unsigned oclass = 0;
    int ret, i;
 
-   if (!screen)
+   if (!screen) {
+      nouveau_device_del(&dev);
       return NULL;
+   }
 
    switch (dev->chipset & 0xf0) {
    case 0x30:
@@ -451,6 +453,7 @@ nv30_screen_create(struct nouveau_device *dev)
 
    if (!oclass) {
       NOUVEAU_ERR("unknown 3d class for 0x%02x\n", dev->chipset);
+      nouveau_device_del(&dev);
       FREE(screen);
       return NULL;
    }

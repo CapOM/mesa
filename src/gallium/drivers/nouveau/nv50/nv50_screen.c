@@ -708,8 +708,10 @@ nv50_screen_create(struct nouveau_device *dev)
    int ret;
 
    screen = CALLOC_STRUCT(nv50_screen);
-   if (!screen)
+   if (!screen) {
+      nouveau_device_del(&dev);
       return NULL;
+   }
    pscreen = &screen->base.base;
 
    ret = nouveau_screen_init(&screen->base, dev);

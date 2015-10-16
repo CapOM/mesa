@@ -117,8 +117,11 @@ nouveau_drm_screen_create(int fd)
 	}
 
 	screen = (struct nouveau_screen*)init(dev);
-	if (!screen)
+	if (!screen) {
+		/* Previous init func took ownership of dev */
+		dev = 0;
 		goto err;
+	}
 
 	/* Use dupfd in hash table, to avoid errors if the original fd gets
 	 * closed by its owner. The hash key needs to live at least as long as
