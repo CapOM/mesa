@@ -603,6 +603,10 @@ vl_mpeg12_begin_frame(struct pipe_video_codec *decoder,
 
    assert(dec && target && picture);
 
+   /* Delay to next decode call. */
+   if (!desc->intra_matrix)
+      return;
+
    buf = vl_mpeg12_get_decode_buffer(dec, target);
    assert(buf);
 
@@ -737,6 +741,9 @@ vl_mpeg12_decode_bitstream(struct pipe_video_codec *decoder,
 
    buf = vl_mpeg12_get_decode_buffer(dec, target);
    assert(buf);
+
+   if (!buf->mv_stream[0])
+      decoder->begin_frame(decoder, target, picture);
 
    for (i = 0; i < VL_NUM_COMPONENTS; ++i)
       vl_zscan_set_layout(&buf->zscan[i], desc->alternate_scan ?
