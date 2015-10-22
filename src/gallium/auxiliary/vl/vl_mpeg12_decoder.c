@@ -590,14 +590,10 @@ vl_mpeg12_begin_frame(struct pipe_video_codec *decoder,
                       struct pipe_picture_desc *picture)
 {
    struct vl_mpeg12_decoder *dec = (struct vl_mpeg12_decoder *)decoder;
-   struct pipe_mpeg12_picture_desc *desc = (struct pipe_mpeg12_picture_desc *)picture;
    struct vl_mpeg12_buffer *buf;
 
    struct pipe_resource *tex;
    struct pipe_box rect = { 0, 0, 0, 1, 1, 1 };
-
-   uint8_t intra_matrix[64];
-   uint8_t non_intra_matrix[64];
 
    unsigned i;
 
@@ -605,21 +601,6 @@ vl_mpeg12_begin_frame(struct pipe_video_codec *decoder,
 
    buf = vl_mpeg12_get_decode_buffer(dec, target);
    assert(buf);
-
-   if (dec->base.entrypoint == PIPE_VIDEO_ENTRYPOINT_BITSTREAM) {
-      memcpy(intra_matrix, desc->intra_matrix, sizeof(intra_matrix));
-      memcpy(non_intra_matrix, desc->non_intra_matrix, sizeof(non_intra_matrix));
-      intra_matrix[0] = 1 << (7 - desc->intra_dc_precision);
-   } else {
-      memset(intra_matrix, 0x10, sizeof(intra_matrix));
-      memset(non_intra_matrix, 0x10, sizeof(non_intra_matrix));
-   }
-
-   for (i = 0; i < VL_NUM_COMPONENTS; ++i) {
-      struct vl_zscan *zscan = i == 0 ? &dec->zscan_y : &dec->zscan_c;
-      vl_zscan_upload_quant(zscan, &buf->zscan[i], intra_matrix, true);
-      vl_zscan_upload_quant(zscan, &buf->zscan[i], non_intra_matrix, false);
-   }
 
    vl_vb_map(&buf->vertex_stream, dec->context);
 
@@ -642,6 +623,37 @@ vl_mpeg12_begin_frame(struct pipe_video_codec *decoder,
 
    for (i = 0; i < VL_MAX_REF_FRAMES; ++i)
       buf->mv_stream[i] = vl_vb_get_mv_stream(&buf->vertex_stream, i);
+}
+
+static void
+vl_mpeg12_reset_intra_matrix(struct pipe_video_codec *decoder,
+                             struct pipe_video_buffer *target,
+                             struct pipe_picture_desc *picture)
+{
+   struct vl_mpeg12_decoder *dec = (struct vl_mpeg12_decoder *)decoder;
+   struct pipe_mpeg12_picture_desc *desc = (struct pipe_mpeg12_picture_desc *)picture;
+   struct vl_mpeg12_buffer *buf;
+   uint8_t intra_matrix[64];
+   uint8_t non_intra_matrix[64];
+   unsigned i;
+
+   buf = vl_mpeg12_get_decode_buffer(dec, target);
+   assert(buf);
+
+   if (dec->base.entrypoint == PIPE_VIDEO_ENTRYPOINT_BITSTREAM) {
+      memcpy(intra_matrix, desc->intra_matrix, sizeof(intra_matrix));
+      memcpy(non_intra_matrix, desc->non_intra_matrix, sizeof(non_intra_matrix));
+      intra_matrix[0] = 1 << (7 - desc->intra_dc_precision);
+   } else {
+      memset(intra_matrix, 0x10, sizeof(intra_matrix));
+      memset(non_intra_matrix, 0x10, sizeof(non_intra_matrix));
+   }
+
+   for (i = 0; i < VL_NUM_COMPONENTS; ++i) {
+      struct vl_zscan *zscan = i == 0 ? &dec->zscan_y : &dec->zscan_c;
+      vl_zscan_upload_quant(zscan, &buf->zscan[i], intra_matrix, true);
+      vl_zscan_upload_quant(zscan, &buf->zscan[i], non_intra_matrix, false);
+   }
 
    if (dec->base.entrypoint >= PIPE_VIDEO_ENTRYPOINT_IDCT) {
       for (i = 0; i < VL_NUM_COMPONENTS; ++i)
@@ -737,6 +749,9 @@ vl_mpeg12_decode_bitstream(struct pipe_video_codec *decoder,
 
    buf = vl_mpeg12_get_decode_buffer(dec, target);
    assert(buf);
+
+   if (!buf->block_num)
+      vl_mpeg12_reset_intra_matrix(decoder, target, picture);
 
    for (i = 0; i < VL_NUM_COMPONENTS; ++i)
       vl_zscan_set_layout(&buf->zscan[i], desc->alternate_scan ?
