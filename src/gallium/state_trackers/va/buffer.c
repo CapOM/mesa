@@ -26,8 +26,11 @@
  *
  **************************************************************************/
 
+#include "pipe/p_screen.h"
 #include "util/u_memory.h"
 #include "util/u_handle_table.h"
+#include "util/u_transfer.h"
+#include "vl/vl_winsys.h"
 
 #include "va_private.h"
 
@@ -73,6 +76,10 @@ vlVaBufferSetNumElements(VADriverContextP ctx, VABufferID buf_id,
       return VA_STATUS_ERROR_INVALID_CONTEXT;
 
    buf = handle_table_get(VL_VA_DRIVER(ctx)->htab, buf_id);
+
+   if (!buf || buf->derived_surface.resource)
+      return VA_STATUS_ERROR_INVALID_BUFFER;
+
    buf->data = REALLOC(buf->data, buf->size * buf->num_elements,
                        buf->size * num_elements);
    buf->num_elements = num_elements;
@@ -86,16 +93,32 @@ vlVaBufferSetNumElements(VADriverContextP ctx, VABufferID buf_id,
 VAStatus
 vlVaMapBuffer(VADriverContextP ctx, VABufferID buf_id, void **pbuff)
 {
+   vlVaDriver *drv;
    vlVaBuffer *buf;
 
    if (!ctx)
       return VA_STATUS_ERROR_INVALID_CONTEXT;
 
-   buf = handle_table_get(VL_VA_DRIVER(ctx)->htab, buf_id);
+   if (!pbuff)
+      return VA_STATUS_ERROR_INVALID_BUFFER;
+
+   drv = VL_VA_DRIVER(ctx);
+
+   buf = handle_table_get(drv->htab, buf_id);
    if (!buf)
       return VA_STATUS_ERROR_INVALID_BUFFER;
 
-   *pbuff = buf->data;
+   if (buf->derived_surface.resource) {
+      *pbuff = pipe_buffer_map(drv->pipe, buf->derived_surface.resource,
+                               PIPE_TRANSFER_WRITE,
+                               &buf->derived_surface.transfer);
+
+      if (!buf->derived_surface.transfer || !*pbuff)
+         return VA_STATUS_ERROR_INVALID_BUFFER;
+
+   } else {
+      *pbuff = buf->data;
+   }
 
    return VA_STATUS_SUCCESS;
 }
@@ -103,16 +126,25 @@ vlVaMapBuffer(VADriverContextP ctx, VABufferID buf_id, void **pbuff)
 VAStatus
 vlVaUnmapBuffer(VADriverContextP ctx, VABufferID buf_id)
 {
+   vlVaDriver *drv;
    vlVaBuffer *buf;
 
    if (!ctx)
       return VA_STATUS_ERROR_INVALID_CONTEXT;
 
-   buf = handle_table_get(VL_VA_DRIVER(ctx)->htab, buf_id);
+   drv = VL_VA_DRIVER(ctx);
+
+   buf = handle_table_get(drv->htab, buf_id);
    if (!buf)
       return VA_STATUS_ERROR_INVALID_BUFFER;
 
-   /* Nothing to do here */
+   if (buf->derived_surface.resource) {
+     if (!buf->derived_surface.transfer)
+        return VA_STATUS_ERROR_INVALID_BUFFER;
+
+     pipe_buffer_unmap(drv->pipe, buf->derived_surface.transfer);
+     buf->derived_surface.transfer = NULL;
+   }
 
    return VA_STATUS_SUCCESS;
 }
@@ -129,7 +161,12 @@ vlVaDestroyBuffer(VADriverContextP ctx, VABufferID buf_id)
    if (!buf)
       return VA_STATUS_ERROR_INVALID_BUFFER;
 
-   FREE(buf->data);
+   if (buf->data)
+     FREE(buf->data);
+
+   if (buf->derived_surface.resource)
+     pipe_resource_reference(&buf->derived_surface.resource, NULL);
+
    FREE(buf);
    handle_table_remove(VL_VA_DRIVER(ctx)->htab, buf_id);
 
