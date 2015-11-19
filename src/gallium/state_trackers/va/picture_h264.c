@@ -42,6 +42,7 @@ void vlVaHandlePictureParameterBufferH264(vlVaDriver *drv, vlVaContext *context,
    /*bit_depth_luma_minus8*/
    /*bit_depth_chroma_minus8*/
    context->desc.h264.num_ref_frames = h264->num_ref_frames;
+   context->decoder->max_references = MIN2(context->desc.h264.num_ref_frames, 16);
    /*chroma_format_idc*/
    /*residual_colour_transform_flag*/
    /*gaps_in_frame_num_value_allowed_flag*/
