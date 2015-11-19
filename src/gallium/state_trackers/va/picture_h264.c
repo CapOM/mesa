@@ -31,6 +31,8 @@
 void vlVaHandlePictureParameterBufferH264(vlVaDriver *drv, vlVaContext *context, vlVaBuffer *buf)
 {
    VAPictureParameterBufferH264 *h264 = buf->data;
+   /* Solution 1 */
+   unsigned int top_or_bottom_field;
 
    assert(buf->size >= sizeof(VAPictureParameterBufferH264) && buf->num_elements == 1);
    /*CurrPic*/
@@ -91,6 +93,82 @@ void vlVaHandlePictureParameterBufferH264(vlVaDriver *drv, vlVaContext *context,
       h264->pic_fields.bits.redundant_pic_cnt_present_flag;
    /*reference_pic_flag*/
    context->desc.h264.frame_num = h264->frame_num;
+
+   /* Solution 1 */
+   context->desc.h264.bottom_field_flag =
+      h264->pic_fields.bits.field_pic_flag &&
+      (h264->CurrPic.flags & VA_PICTURE_H264_BOTTOM_FIELD) != 0;
+   /* Solution 2 */
+   /*context->desc.h264.bottom_field_flag =
+      !!(h264->CurrPic.flags & VA_PICTURE_H264_BOTTOM_FIELD);*/
+
+   /*reference_pic_flag*/
+   context->desc.h264.is_reference = h264->pic_fields.bits.reference_pic_flag;
+   context->desc.h264.frame_num = h264->frame_num;
+
+   for (i = 0; i < context->decoder->max_references; ++i) {
+      if ((h264->ReferenceFrames[i].flags & VA_PICTURE_H264_INVALID) ||
+          (h264->ReferenceFrames[i].picture_id == VA_INVALID_SURFACE)) {
+         context->desc.h264.ref[i] = NULL;
+         context->desc.h264.frame_num_list[i] = 0;
+         context->desc.h264.is_long_term[i] = 0;
+         context->desc.h264.top_is_reference[i] = 0;
+         context->desc.h264.bottom_is_reference[i] = 0;
+         context->desc.h264.field_order_cnt_list[i][0] = 0;
+         context->desc.h264.field_order_cnt_list[i][1] = 0;
+         break;
+      }
+      getReferenceFrame(drv, h264->ReferenceFrames[i].picture_id, &context->desc.h264.ref[i]);
+      context->desc.h264.frame_num_list[i] = h264->ReferenceFrames[i].frame_idx;
+
+      /* Solution 1 */
+      top_or_bottom_field = h264->ReferenceFrames[i].flags &
+         (VA_PICTURE_H264_TOP_FIELD | VA_PICTURE_H264_BOTTOM_FIELD);
+      context->desc.h264.is_long_term[i] = (h264->ReferenceFrames[i].flags &
+         (VA_PICTURE_H264_SHORT_TERM_REFERENCE |
+         VA_PICTURE_H264_LONG_TERM_REFERENCE)) !=
+         VA_PICTURE_H264_SHORT_TERM_REFERENCE;
+      context->desc.h264.top_is_reference[i] =
+         !context->desc.h264.is_long_term[i] ||
+         !!(h264->ReferenceFrames[i].flags & VA_PICTURE_H264_TOP_FIELD);
+      context->desc.h264.bottom_is_reference[i] =
+         !context->desc.h264.is_long_term[i] ||
+         !!(h264->ReferenceFrames[i].flags & VA_PICTURE_H264_BOTTOM_FIELD);
+      context->desc.h264.field_order_cnt_list[i][0] =
+         top_or_bottom_field != VA_PICTURE_H264_BOTTOM_FIELD ?
+         h264->ReferenceFrames[i].TopFieldOrderCnt: INT_MAX;
+      context->desc.h264.field_order_cnt_list[i][1] =
+         top_or_bottom_field != VA_PICTURE_H264_TOP_FIELD ?
+         h264->ReferenceFrames[i].BottomFieldOrderCnt: INT_MAX;
+      /* Solution 2 */
+      /*context->desc.h264.is_long_term[i] = (h264->ReferenceFrames[i].flags &
+         VA_PICTURE_H264_LONG_TERM_REFERENCE) != 0;
+      if ((h264->ReferenceFrames[i].flags &
+         (VA_PICTURE_H264_TOP_FIELD | VA_PICTURE_H264_BOTTOM_FIELD)) == 0) {
+         context->desc.h264.top_is_reference[i]  = 1;
+         context->desc.h264.bottom_is_reference[i] = 1;
+      } else {
+         context->desc.h264.top_is_reference[i] =
+            (h264->ReferenceFrames[i].flags & VA_PICTURE_H264_TOP_FIELD) != 0;
+         context->desc.h264.bottom_is_reference[i] =
+            (h264->ReferenceFrames[i].flags & VA_PICTURE_H264_BOTTOM_FIELD) != 0;
+      }
+      context->desc.h264.field_order_cnt_list[i][0] =
+         h264->ReferenceFrames[i].TopFieldOrderCnt;
+      context->desc.h264.field_order_cnt_list[i][1] =
+         h264->ReferenceFrames[i].BottomFieldOrderCnt;*/
+   }
+
+   /* Make sure remaining elements are clean */
+   for (; i < 16; ++i) {
+      context->desc.h264.ref[i] = NULL;
+      context->desc.h264.frame_num_list[i] = 0;
+      context->desc.h264.is_long_term[i] = 0;
+      context->desc.h264.top_is_reference[i] = 0;
+      context->desc.h264.bottom_is_reference[i] = 0;
+      context->desc.h264.field_order_cnt_list[i][0] = 0;
+      context->desc.h264.field_order_cnt_list[i][1] = 0;
+   }
 }
 
 void vlVaHandleIQMatrixBufferH264(vlVaContext *context, vlVaBuffer *buf)
