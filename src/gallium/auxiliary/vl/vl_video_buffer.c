@@ -253,6 +253,9 @@ vl_video_buffer_template(struct pipe_resource *templ,
    templ->bind = PIPE_BIND_SAMPLER_VIEW | PIPE_BIND_RENDER_TARGET;
    templ->usage = usage;
 
+   if (tmpl->disable_tiling)
+      templ->bind |= PIPE_BIND_LINEAR;
+
    if (plane > 0) {
       if (tmpl->chroma_format == PIPE_VIDEO_CHROMA_FORMAT_420) {
          templ->width0 /= 2;
