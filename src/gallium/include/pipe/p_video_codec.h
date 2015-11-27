@@ -125,6 +125,7 @@ struct pipe_video_buffer
    enum pipe_video_chroma_format chroma_format;
    unsigned width;
    unsigned height;
+   bool disable_tiling;
    bool interlaced;
 
    /**
