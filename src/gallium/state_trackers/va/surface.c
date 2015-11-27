@@ -608,6 +608,11 @@ vlVaCreateSurfaces2(VADriverContextP ctx, unsigned int format,
 
       switch (memory_type) {
       case VA_SURFACE_ATTRIB_MEM_TYPE_VA:
+         /* The application will clear the TILING flag when the surface is
+          * intended to be exported as dmabuf. */
+         templat.disable_tiling = memory_attibute &&
+            !(memory_attibute->flags & VA_SURFACE_EXTBUF_DESC_ENABLE_TILING);
+
          surf->buffer = drv->pipe->create_video_buffer(drv->pipe, &templat);
          if (!surf->buffer) {
             FREE(surf);
