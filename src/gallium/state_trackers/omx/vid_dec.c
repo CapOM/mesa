@@ -44,6 +44,8 @@
 #include <bellagio/omxcore.h>
 #endif
 
+#include <omx_reference_resource_manager.h>
+
 #include "pipe/p_screen.h"
 #include "pipe/p_video_codec.h"
 #include "util/u_memory.h"
@@ -133,6 +135,8 @@ static OMX_ERRORTYPE vid_dec_Constructor(OMX_COMPONENTTYPE *comp, OMX_STRING nam
    int i;
 
    assert(!comp->pComponentPrivate);
+
+   RM_RegisterComponent(OMX_VID_DEC_AVC_NAME, 4);
 
    priv = comp->pComponentPrivate = CALLOC(1, sizeof(vid_dec_PrivateType));
    if (!priv)
@@ -506,6 +510,24 @@ static OMX_ERRORTYPE vid_dec_FreeDecBuffer(omx_base_PortType *port, OMX_U32 idx,
    return base_port_FreeBuffer(port, idx, buf);
 }
 
+static void
+omxVideoSurfaceSize(struct pipe_video_buffer *buf, int component,
+                    unsigned *width, unsigned *height)
+{
+   *width = buf->width;
+   *height = buf->height;
+
+   if (component > 0) {
+      if (buf->chroma_format == PIPE_VIDEO_CHROMA_FORMAT_420) {
+         *width /= 2;
+         *height /= 2;
+      } else if (buf->chroma_format == PIPE_VIDEO_CHROMA_FORMAT_422)
+         *width /= 2;
+   }
+   if (buf->interlaced)
+      *height /= 2;
+}
+
 static void vid_dec_FillOutput(vid_dec_PrivateType *priv, struct pipe_video_buffer *buf,
                                OMX_BUFFERHEADERTYPE* output)
 {
@@ -513,34 +535,32 @@ static void vid_dec_FillOutput(vid_dec_PrivateType *priv, struct pipe_video_buff
    OMX_VIDEO_PORTDEFINITIONTYPE *def = &port->sPortParam.format.video;
 
    struct pipe_sampler_view **views;
-   struct pipe_transfer *transfer;
-   struct pipe_box box = { };
-   uint8_t *src, *dst;
+   unsigned i, j;
 
    views = buf->get_sampler_view_planes(buf);
 
-   dst = output->pBuffer;
+   for (i = 0; i < 2 /* NV12 */; i++) {
+      unsigned width, height;
+      if (!views[i]) continue;
+      omxVideoSurfaceSize(buf, i, &width, &height);
+      for (j = 0; j < views[i]->texture->array_size; ++j) {
+         struct pipe_box box = {0, 0, j, width, height, 1};
+         struct pipe_transfer *transfer;
+         uint8_t *map, *dst;
+         map = priv->pipe->transfer_map(priv->pipe, views[i]->texture, 0,
+                  PIPE_TRANSFER_READ, &box, &transfer);
+         if (!map)
+            return;
 
-   box.width = def->nFrameWidth;
-   box.height = def->nFrameHeight;
-   box.depth = 1;
+         dst = ((uint8_t*)output->pBuffer + output->nOffset) + j * def->nStride + i * buf->width * buf->height;
+         util_copy_rect(dst,
+            views[i]->texture->format,
+            def->nStride * views[i]->texture->array_size, 0, 0,
+            box.width, box.height, map, transfer->stride, 0, 0);
 
-   src = priv->pipe->transfer_map(priv->pipe, views[0]->texture, 0,
-                                  PIPE_TRANSFER_READ, &box, &transfer);
-   util_copy_rect(dst, views[0]->texture->format, def->nStride, 0, 0,
-                  box.width, box.height, src, transfer->stride, 0, 0);
-   pipe_transfer_unmap(priv->pipe, transfer);
-
-   dst = ((uint8_t*)output->pBuffer) + (def->nStride * box.height);
-
-   box.width = def->nFrameWidth / 2;
-   box.height = def->nFrameHeight / 2;
- 
-   src = priv->pipe->transfer_map(priv->pipe, views[1]->texture, 0,
-                                  PIPE_TRANSFER_READ, &box, &transfer);
-   util_copy_rect(dst, views[1]->texture->format, def->nStride, 0, 0,
-                  box.width, box.height, src, transfer->stride, 0, 0);
-   pipe_transfer_unmap(priv->pipe, transfer);
+         pipe_transfer_unmap(priv->pipe, transfer);
+      }
+   }
 }
 
 static void vid_dec_FrameDecoded(OMX_COMPONENTTYPE *comp, OMX_BUFFERHEADERTYPE* input,
