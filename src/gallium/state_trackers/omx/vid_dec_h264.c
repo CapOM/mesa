@@ -119,6 +119,7 @@ static void vid_dec_h264_BeginFrame(vid_dec_PrivateType *priv)
       templat.width = port->sPortParam.format.video.nFrameWidth;
       templat.height = port->sPortParam.format.video.nFrameHeight;
       templat.level = priv->picture.h264.pps->sps->level_idc;
+      printf("-- templat.max_references %d, %dx%d\n", templat.max_references, templat.width, templat.height);
 
       priv->codec = priv->pipe->create_video_codec(priv->pipe, &templat);
    }
@@ -662,6 +663,16 @@ static void slice_header(vid_dec_PrivateType *priv, struct vl_rbsp *rbsp,
 
    slice_type = vl_rbsp_ue(rbsp) % 5;
 
+   //priv->picture.h264.is_reference = slice_type == PIPE_H264_SLICE_TYPE_I;
+
+   if (slice_type == PIPE_H264_SLICE_TYPE_I)
+       printf("\n-- got I frame\n");
+   else if (slice_type == PIPE_H264_SLICE_TYPE_P)
+       printf("-- got P frame\n");
+   else if (slice_type == PIPE_H264_SLICE_TYPE_B)
+       printf("-- got B frame\n");
+   else printf("-- got special frame %d\n", slice_type);
+
    pps = pic_parameter_set_id(priv, rbsp);
    if (!pps)
       return;
@@ -687,8 +698,74 @@ static void slice_header(vid_dec_PrivateType *priv, struct vl_rbsp *rbsp,
    prevFrameNum = priv->picture.h264.frame_num;
    priv->picture.h264.frame_num = frame_num;
 
+   printf("-- frame num: %d\n", frame_num);
+
    priv->picture.h264.field_pic_flag = 0;
    priv->picture.h264.bottom_field_flag = 0;
+
+   if (slice_type == PIPE_H264_SLICE_TYPE_I) {
+       /*
+         frame_num is le nb frames (b, p) entre 2 I frames, 40 pour simpson
+
+
+         begin:
+frame = ++dec->frame_number;
+vl_video_buffer_set_associated_data(target, decoder, (void *)frame,
+                &ruvd_destroy_associated_data);
+
+                le but est de setter pic->ref[i]
+
+         end:
+    for (i = 0; i < 16; ++i) {
+        struct pipe_video_buffer *ref = pic->ref[i];
+        uintptr_t ref_pic = 0;
+
+        result.poc_list[i] = pic->PicOrderCntVal[i];
+
+        if (ref)
+            ref_pic = (uintptr_t)vl_video_buffer_get_associated_data(ref, &dec->base);
+        else
+            ref_pic = 0x7F;
+        result.ref_pic_list[i] = ref_pic;
+    }
+
+        */
+
+
+       /*for (i = 0; i < context->templat.max_references; ++i) {
+          if ((h264->ReferenceFrames[i].flags & VA_PICTURE_H264_INVALID) ||
+              (h264->ReferenceFrames[i].picture_id == VA_INVALID_SURFACE)) {
+             resetReferencePictureDesc(&context->desc.h264, i);
+             break;
+          }
+
+          vlVaGetReferenceFrame(drv, h264->ReferenceFrames[i].picture_id, &context->desc.h264.ref[i]);
+          context->desc.h264.frame_num_list[i] = h264->ReferenceFrames[i].frame_idx;
+
+          top_or_bottom_field = h264->ReferenceFrames[i].flags &
+             (VA_PICTURE_H264_TOP_FIELD | VA_PICTURE_H264_BOTTOM_FIELD);
+          context->desc.h264.is_long_term[i] = (h264->ReferenceFrames[i].flags &
+             (VA_PICTURE_H264_SHORT_TERM_REFERENCE |
+             VA_PICTURE_H264_LONG_TERM_REFERENCE)) !=
+             VA_PICTURE_H264_SHORT_TERM_REFERENCE;
+          context->desc.h264.top_is_reference[i] =
+             !context->desc.h264.is_long_term[i] ||
+             !!(h264->ReferenceFrames[i].flags & VA_PICTURE_H264_TOP_FIELD);
+          context->desc.h264.bottom_is_reference[i] =
+             !context->desc.h264.is_long_term[i] ||
+             !!(h264->ReferenceFrames[i].flags & VA_PICTURE_H264_BOTTOM_FIELD);
+          context->desc.h264.field_order_cnt_list[i][0] =
+             top_or_bottom_field != VA_PICTURE_H264_BOTTOM_FIELD ?
+             h264->ReferenceFrames[i].TopFieldOrderCnt: INT_MAX;
+          context->desc.h264.field_order_cnt_list[i][1] =
+             top_or_bottom_field != VA_PICTURE_H264_TOP_FIELD ?
+             h264->ReferenceFrames[i].BottomFieldOrderCnt: INT_MAX;
+       }*/
+
+       /* Make sure remaining elements are clean */
+       /*for (; i < 16; ++i)
+          resetReferencePictureDesc(&context->desc.h264, i);*/
+   }
 
    if (!sps->frame_mbs_only_flag) {
       unsigned field_pic_flag = vl_rbsp_u(rbsp, 1);
@@ -705,6 +782,8 @@ static void slice_header(vid_dec_PrivateType *priv, struct vl_rbsp *rbsp,
             vid_dec_h264_EndFrame(priv);
 
          priv->picture.h264.bottom_field_flag = bottom_field_flag;
+
+         printf("-- todo handle ref frames\n");
       }
    }
 
@@ -947,6 +1026,7 @@ static void vid_dec_h264_Decode(vid_dec_PrivateType *priv, struct vl_vlc *vlc, u
 
    if (priv->slice) {
       unsigned bytes = priv->bytes_left - (vl_vlc_bits_left(vlc) / 8);
+      printf("-- decode nbytes: %u\n", bytes);
       ++priv->picture.h264.slice_count;
       priv->codec->decode_bitstream(priv->codec, priv->target, &priv->picture.base,
                                     1, &priv->slice, &bytes);
@@ -1001,6 +1081,7 @@ static void vid_dec_h264_Decode(vid_dec_PrivateType *priv, struct vl_vlc *vlc, u
       priv->slice = vlc->data;
 
       vl_rbsp_init(&rbsp, vlc, 128);
+      //printf("-- slice header: %u\n", bytes);
       slice_header(priv, &rbsp, nal_ref_idc, nal_unit_type);
 
       vid_dec_h264_BeginFrame(priv);
