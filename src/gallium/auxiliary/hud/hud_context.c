@@ -520,8 +520,19 @@ hud_draw(struct hud_context *hud, struct pipe_resource *tex)
 
    /* prepare vertex buffers */
    hud_alloc_vertices(hud, &hud->bg, 4 * 128, 2 * sizeof(float));
+   if (!hud->bg.vertices) {
+      goto out;
+   }
+
    hud_alloc_vertices(hud, &hud->whitelines, 4 * 256, 2 * sizeof(float));
+   if (!hud->whitelines.vertices) {
+      goto out;
+   }
+
    hud_alloc_vertices(hud, &hud->text, 4 * 512, 4 * sizeof(float));
+   if (!hud->text.vertices) {
+      goto out;
+   }
 
    /* prepare all graphs */
    hud_batch_query_update(hud->batch_query);
@@ -591,6 +602,7 @@ hud_draw(struct hud_context *hud, struct pipe_resource *tex)
          hud_pane_draw_colored_objects(hud, pane);
    }
 
+out:
    cso_restore_state(cso);
    cso_restore_constant_buffer_slot0(cso, PIPE_SHADER_VERTEX);
 
